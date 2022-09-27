@@ -1,0 +1,31 @@
+{{- range $key, $val := .Values.domain }}
+  {{- if $val.expose }}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ $.Values.name }}-{{ $key }}
+  labels:
+{{ include "app.labels" $ | indent 4 }}
+{{- if $val.labels }}
+{{ toYaml $val.labels | indent 4 }}
+{{- end }}
+  annotations:
+{{- if ($.Values.prometheus | default false) }}
+    prometheus.io/ingress: '{{ $.Values.prometheus.ingress |  default "true" }}'
+    prometheus.io/ingress_path: '{{ $.Values.prometheus.ingress_path |  default $.Values.health.url }}'
+{{- end }}
+{{ toYaml $.Values.ingressAnnotations | indent 4 }}
+spec:
+  tls:
+  - hosts:
+    - {{ $.Values.name }}-{{ include "env_short_name" $ }}.{{ tpl $val.url $ }}
+  rules:
+    - host: {{ $.Values.name }}-{{ include "env_short_name" $ }}.{{ tpl $val.url $ }}
+      http:
+        paths:
+          - backend:
+              serviceName: {{ $.Values.name }}
+              servicePort: app
+  {{- end }}
+{{- end }}

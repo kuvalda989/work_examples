@@ -1,0 +1,16 @@
+version: '3.7'
+services:
+  kafka:
+    image: ubuntu-18-04-ym-kafka-ps:{{ kafka_ps_image_tag }}
+    hostname: {{ ansible_hostname }}
+    container_name: {{ ansible_hostname }}
+    network_mode: "host"
+    volumes:
+      - {{ kafka_ps_config_dir }}/config/{{ ansible_hostname }}-server.properties:/opt/kafka/config/server.properties:ro
+      - {{ kafka_ps_config_dir }}/config/prom-jmx-agent-config.yml:/usr/app/prom-jmx-agent-config.yml:ro
+      - {{ kafka_ps_config_dir }}/config/kafka-server-start.sh:/opt/kafka/bin/kafka-server-start.sh:ro
+      - {{ kafka_ps_config_dir }}/config/log4j.properties:/opt/kafka/config/log4j.properties:ro
+      - /etc/ssl/kafka:/opt/kafka/ssl:ro
+      - /var/lib/kafka/data:/opt/kafka/data:rw
+      - /var/log/kafka/:/opt/kafka/logs:rw
+    restart: unless-stopped

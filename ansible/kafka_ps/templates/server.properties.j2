@@ -1,0 +1,78 @@
+broker.id={{ broker_id }}
+delete.topic.enable=true
+{% if 'dev' in groups or 'LoadRelease' in groups %}
+listeners=PLAINTEXT://localhost:9092,SSL://0.0.0.0:9093
+advertised.listeners={{ listeners }}
+log.roll.hours=24
+{% else %}
+listeners={{ listeners }}
+{% endif %}
+log.dirs=/opt/kafka/data
+
+# Balancing replicas across racks
+broker.rack={{ broker_rack }}
+# Balancing leadership
+auto.leader.rebalance.enable=true
+# If set to true, allows the replicas that are not in-sync replicas (ISR) to become the leader.
+unclean.leader.election.enable=false
+
+# replicafactor=3, acks=all,min_insync=2 => will be good, i think
+min.insync.replicas={{ kafka_ps_min_insync_replicas }}
+default.replication.factor={{ default_replication_factor }}
+offsets.topic.replication.factor={{ offsets_topic_replication_factor }}
+transaction.state.log.replication.factor={{ transaction_state_log_replication_factor }}
+# number of acknowledgements required before the offset commit can be accepted
+# offsets.commit.required.acks=2
+
+# Threads
+num.network.threads=3
+num.io.threads=8
+# number of threads used to replicate the messages from the leader, expiremental option.
+num.replica.fetchers=4
+
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+
+num.partitions=1
+num.recovery.threads.per.data.dir=1
+transaction.state.log.min.isr=1
+log.retention.hours={{ kafka_ps_retention_hours }}
+log.segment.bytes=1073741824
+log.retention.check.interval.ms=300000
+zookeeper.connect={{ zookeeper_connect }}
+zookeeper.connection.timeout.ms=6000
+group.initial.rebalance.delay.ms=0
+leader.imbalance.check.interval.seconds=60
+offsets.retention.minutes=131400
+
+#enable SSL for inter-broker communication
+security.inter.broker.protocol=SSL
+
+#ssl.client.auth=required
+
+ssl.enabled.protocols=TLSv1.2,TLSv1.1,TLSv1
+ssl.keystore.type=JKS
+ssl.truststore.type=JKS
+ssl.keystore.location = /opt/kafka/ssl/keystore.jks
+ssl.keystore.password = {{ ssl_keystore_password }}
+ssl.key.password = {{ ssl_key_password }}
+ssl.truststore.location = /opt/kafka/ssl/truststore.jks
+ssl.truststore.password = {{ ssl_truststore_password }}
+
+auto.create.topics.enable={{ auto_create_topics_enable }}
+
+{% if 'prod' in groups %}
+inter.broker.protocol.version=2.4
+log.message.format.version=2.4
+{% else %}
+
+{% endif %}
+allow.everyone.if.no.acl.found=true
+
+# for gracefull shutdown
+controlled.shutdown.enable=true
+# Authorization rules. Doesn't work. Need testing
+#authorizer.class.name=kafka.security.auth.SimpleAclAuthorizer
+#ssl.client.auth=requested
+#ssl.principal.mapping.rules=RULE:^.*CN=(.*?),.*$/$1/,DEFAULT

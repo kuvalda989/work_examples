@@ -1,0 +1,12 @@
+server:
+  ingress:
+    enabled: true
+    hosts:
+      - argocd.main.podlipd.online
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: "*.main.podlipd.online"
+      cert-manager.io/cluster-issuer: "letsencrypt-stage"
+      external-dns.alpha.kubernetes.io/ingress-hostname-source: annotation-only
+      kubernetes.io/ingress.class: nginx
+  extraArgs:
+    - --insecure

@@ -1,0 +1,15 @@
+{{- if .Values.prometheus.servicemonitor }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Values.name }}
+spec:
+  endpoints:
+    - interval: 15s
+      path: {{ .Values.prometheus.path }}
+      port: app
+      targetPort: {{ .Values.prometheus.service_port }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+{{- end }}

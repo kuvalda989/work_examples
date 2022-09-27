@@ -1,0 +1,15 @@
+---
+
+- name: prepare
+  include_tasks: prepare.yml
+
+- name: jks create
+  when: "'prod' in groups"
+  include_tasks: jks-create.yml
+
+- name: kafka up & running
+  include_tasks: kafka_up_running.yml
+
+- name: clean tmp directory
+  when: "'prod' in groups"
+  include_tasks: clean.yml

@@ -1,0 +1,13 @@
+{{- if .Values.env.params }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-env-params
+  labels:
+{{ include "app.labels" $ | indent 4 }}
+data:
+{{- range $key,$val := .Values.env.params }}
+  {{ $key }}: {{ tpl ($val|toString) $ | quote }}
+{{- end }}
+
+{{- end }}

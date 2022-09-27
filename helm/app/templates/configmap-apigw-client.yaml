@@ -1,0 +1,22 @@
+{{- if .Values.apigw.secret }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-apigw-client"
+  labels: {{ include "app.labels.static" $ | nindent 4 }}
+  annotations:
+    rhsso.cli/type: client
+    rhsso.cli/target-instance: {{ .Values.sso.instance }}
+    rhsso.cli/target-realm: {{ .Values.sso.realm }}
+data:
+  client: |-
+    {
+        "clientId": "{{ .Release.Name }}",
+        "name": "{{ .Release.Name }}",
+        "defaultClientScopes": {{ toJson .Values.sso.defaultClientScopes  }},
+        "description": "Client for apigw",
+        "enabled": true,
+        "serviceAccountsEnabled": true,
+        "standardFlowEnabled": false
+    }
+{{- end }}

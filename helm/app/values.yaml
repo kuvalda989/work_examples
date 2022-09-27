@@ -1,0 +1,144 @@
+# Routes configuration
+# Global parameters, which can be specifid or overwritten on environment level
+global:
+  #openshif project prefix, it is used to build environment short name
+  #external and internal domains for routes
+  domain_internal: ""
+  domain_external: ""
+  #release version for versions discovery and for image tag
+  release_version: "changeme"
+  # use database operator instead of createdb job
+  useDBOperator: false
+
+# Default values for routes configuration
+domain:
+  # external (intERnet) routes configuration
+  external:
+    # default domain for external routes
+    default_url: "internal.domain.com"
+    # Determine whether domain url is overwritten by the global parameter
+    url: "{{ .Values.global.domain_external | default .Values.domain.external.default_url }}"
+    # This slug is used to look for certificates for the domain (dashes and dots in yaml keys are not allowed)
+    slug: '{{ .Values.global.domain_external | default .Values.domain.external.default_url | replace "-" "_" | replace "." "_" }}'
+    # whether external routes should be created or not
+    expose: false
+
+    # labels that should be added to the routes
+    labels: {}
+  # internal (intRAnet routes) configuration
+  internal:
+    default_url: "internal.domain.com"
+    url: "{{ .Values.global.domain_internal | default .Values.domain.internal.default_url }}"
+    slug: '{{ .Values.global.domain_internal | default .Values.domain.internal.default_url | replace "-" "_" | replace "." "_" }}'
+    expose: false
+    labels: {}
+
+#annotations that have to be added to each route
+ingressAnnotations:
+  kubernetes.io/ingress.class: nginx
+  nginx.ingress.kubernetes.io/rewrite-target: /
+  nginx.ingress.kubernetes.io/ssl-redirect: “true”
+
+
+
+
+docker:
+  registry: "registry/internal"
+image:
+  name: "change-me"
+  tag: "{{ .Values.global.release_version }}"
+
+
+serviceAccount: false
+
+scaling_denied: false
+
+replicas: 1
+
+rollingTimeout: 600
+
+health:
+  url: "/actuator/health"
+
+service:
+  app:
+    pod_port: 8080
+    service_port: 80
+    protocol: "TCP"
+
+# Resources (cpu and mem)
+resources:
+  # how much should be requested (affects node chosing by scheduling)
+  requests:
+    memory: "750Mi"
+    cpu: "20m"
+  # application will not consume more then these limits
+  # for java applications java heap size is set based on the limit
+  limits:
+    memory: "750Mi"
+    cpu: "3000m"
+
+probes:
+  readiness:
+    initialDelaySeconds: 60
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 2
+  liveness:
+    initialDelaySeconds: 180
+    periodSeconds: 5
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 10
+
+# Monitoring
+prometheus:
+  # metrics location
+  path: "/metrics"
+  # pod port to scrap metrics
+  pod_port: 8080
+  # servie port to scrap metrics
+  service_port: 80
+
+links_domain: "internal"
+
+env:
+  ## simple "name:value" pairs
+  default:
+    ENVIRONMENT_NAME: "{{ .Release.Namespace }}"
+    CLIENT_ID: "{{ .Values.name }}"
+    SPRING_ZIPKIN_BASEURL: "http://jaeger-zipkin:9411/"
+    SERVER_PORT: "{{ .Values.service.app.pod_port }}"
+    SERVER_MAX_HTTP_HEADER_SIZE: "20000"
+    LOGGING_ROOT: "/tmp"
+    SERVER_CONTEXTPATH: "/"
+    JAVA_TOOL_OPTIONS: "{{ if gt (.Values.java_version|int) 9 }}-XX:+UseContainerSupport -XX:InitialRAMPercentage=50 -XX:MinRAMPercentage=50 -XX:MaxRAMPercentage=50{{ else }}-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:MaxRAMFraction=2 -XX:InitialRAMFraction=2 -XX:MinRAMFraction=2{{ end }}"
+  params: {}
+  #    ENV_VAR_NAME: "ENV_VAR_VAL"
+  ## setting variables from kubernetes metadata
+  #  fields:
+  #    ENV_VAR_NAME:
+  #      field: status.podIP #openshift metadata field name
+  ## create and add secrets on the fly
+  secrets: {}
+  ## list of config maps to add env vars from
+  inject_maps: []
+  ## list of secrets to add env vars from
+  inject_secrets: []
+#  - environment_variable_name: "ENV_VAR_NAME"
+#    secret_name: "KUBERNETES_SECRET_NAME"
+#    key: "KUBERNETES_SECRET_KEY"
+
+# Database related settings
+# Database enabled for the service
+requires_db: false
+
+# database connection parameters
+db:
+  image:
+    name: "postgresql-96-centos7"
+    tag: "master"
+
+aws:
+  eksCluster: change-me

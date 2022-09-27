@@ -1,0 +1,35 @@
+---
+# By default gid docker=999, but this gid used for kafka
+- name: change group for docker
+  group:
+    name: docker
+    state: present
+    gid: '118'
+
+- name: create group kafka
+  group:
+    name: kafka
+    state: present
+    gid: '40002'
+
+- name: create user kafka
+  user:
+    name: kafka
+    group: kafka
+    shell: /bin/false
+    comment: User for kafka
+    create_home: no
+    uid: '40002'
+
+- name: create config, logs dir
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: kafka
+    group: kafka
+  with_items:
+    - "{{ kafka_ps_config_dir }}"
+    - "{{ kafka_ps_config_dir }}/config"
+    - "{{ kafka_ps_secret_ssl_path }}"
+    - "/var/log/kafka"
+    - "/var/lib/kafka/data"

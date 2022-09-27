@@ -1,0 +1,30 @@
+helmDefaults:
+   wait: true
+   timeout: 600
+   historyMax: 10
+   createNamespace: false
+releases:
+- name: {{ requiredEnv "SERVICE_NAME" }}
+  namespace: {{ requiredEnv "NAMESPACE" }}
+  chart: ./
+  missingFileHandler: Warn
+  atomic: true
+  hooks:
+  - events: ["prepare"]
+    showlogs: true
+    command: "hooks/get-cm-hash"
+    args: ["-i","./values.yaml","-o","./get-cm-hash.yaml","-n","{{`{{.Release.Namespace}}`}}"]
+  set:
+  - name: app.aws.eksCluster
+    value: {{ requiredEnv "CLUSTER" }}
+  values:
+  - ./get-cm-hash.yaml
+  - ./get-db-recreate-status.yaml
+  - ./release-version.yaml
+  - ./apigw-conf.yaml
+  - ./service-env-values.yaml
+  - ./apigw-secret.yaml
+  secrets:
+  - charts/*/secrets/secret.yaml
+  - secrets/secret.yaml
+  - ./service-env-secrets.yaml

@@ -1,0 +1,8 @@
+---
+
+- name: clean temp directory
+  become: no
+  connection: local
+  file:
+    path: "{{ hostvars[ansible_play_hosts[0]].kafka_ps_secret_tmp_dir }}"
+    state: absent

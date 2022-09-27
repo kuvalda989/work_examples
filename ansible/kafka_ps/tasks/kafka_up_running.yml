@@ -1,0 +1,34 @@
+---
+
+- name: move docker-compose.yml.j2 to "{{ kafka_ps_config_dir }}"
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ kafka_ps_config_dir }}/docker-compose.yml"
+
+- name: move server.properties.j2 to "{{ kafka_ps_config_dir }}/config"
+  template:
+    src: server.properties.j2
+    dest: "{{ kafka_ps_config_dir }}/config/{{ ansible_hostname }}-server.properties"
+    owner: kafka
+    group: kafka
+    mode: 0600
+
+- name: move kafka-server-start.sh.j2 to "{{ kafka_ps_config_dir }}/config"
+  template:
+    src: kafka-server-start.sh.j2
+    dest: "{{ kafka_ps_config_dir }}/config/kafka-server-start.sh"
+    owner: kafka
+    group: kafka
+    mode: 0700
+
+- name: move jmx config to "{{ kafka_ps_config_dir }}/config"
+  template:
+    src: prom-jmx-agent-config.yml.j2
+    dest: "{{ kafka_ps_config_dir }}/config/prom-jmx-agent-config.yml"
+    owner: kafka
+    group: kafka
+    mode: 0600
+
+- name: docker-compose up
+  docker_service:
+    project_src: "{{ kafka_ps_config_dir }}"

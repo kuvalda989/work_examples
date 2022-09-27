@@ -1,0 +1,178 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  labels:
+{{ include "app.labels" $ | indent 4 }}
+spec:
+{{- if or (not .Values.scaling_denied) (lt (.Values.replicas | int64) 1) }}
+  replicas: {{ (.Values.replicas | int64) }}
+{{- else }}
+  replicas: 1
+{{- end }}
+  selector:
+    matchLabels:
+      name: {{ .Values.name }}
+  template:
+    metadata:
+      annotations:
+{{- if (.Values.prometheus | default false) }}
+        prometheus.io/scrape: '{{ .Values.prometheus.scrape | default "true" }}'
+        prometheus.io/port: '{{ .Values.prometheus.pod_port }}'
+        prometheus.io/path: '{{ .Values.prometheus.path }}'
+        prometheus.io/health: '{{  .Values.prometheus.health |  default "true" }}'
+        prometheus.io/health_path: '{{ .Values.prometheus.health_path |  default .Values.health.url }}'
+        prometheus.io/health_port: '{{ .Values.prometheus.service_health_port  | default "80" }}'
+{{- end }}
+      labels:
+        name: {{ .Values.name }}
+    spec:
+{{- if .Values.serviceAccount }}
+      serviceAccount: {{ .Values.serviceAccount }}
+      serviceAccountName: {{ .Values.serviceAccount }}
+{{- end }}
+      containers:
+      - name: {{ .Values.name }}
+{{- if .Values.resources }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+{{- end }}
+        env:
+{{- if (.Values.requires_db|default false) }}
+{{- if .Values.global.useDBOperator}}
+        - name: DB_HOST
+          value: {{ include "app.db_host" $ }}
+{{- else }}
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.name }}-db-external-secret
+              key: db_host
+{{- end }}
+        - name: SPRING_DATASOURCE_URL
+          value: '{{ (print "jdbc:postgresql://$(DB_HOST)/" (include "app.db_name" $ )) }}'
+{{- end }}
+{{ include "app.env_vars_base" $ | indent 8 }}
+{{ if .Values.links }}
+{{ include "app.env_vars_links" $ | indent 8 }}
+{{- end }}
+{{- if or (.Values.env.fields ) (.Values.env.secrets) (.Values.env.inject_secrets) }}
+  {{- range $key, $val := .Values.env.fields }}
+        - name: {{ $key }}
+          valueFrom:
+            fieldRef:
+              fieldPath: {{ $val.field }}
+  {{- end }}
+  {{- range $key, $val := .Values.env.secrets }}
+        - name: {{ $key }}
+          valueFrom:
+            secretKeyRef:
+              key:  {{ $key }}
+              name: {{ $.Values.name }}-env-secrets
+  {{- end }}
+  {{- range $secret_reference := .Values.env.inject_secrets }}
+        - name: {{ $secret_reference.environment_variable_name }}
+          valueFrom:
+            secretKeyRef:
+              key:  {{ $secret_reference.key }}
+              name: {{ $secret_reference.secret_name }}
+  {{- end }}
+{{- end }}
+        envFrom:
+          - configMapRef:
+              name: {{ .Values.name }}-env-default
+{{- if (.Values.env.inject_maps) }}
+  {{- range $map_name := .Values.env.inject_maps }}
+          - configMapRef:
+              name: {{ $map_name }}
+  {{- end }}
+{{- end }}
+{{- if .Values.env.params }}
+          - configMapRef:
+              name: {{ .Values.name }}-env-params
+{{- end }}
+        image: {{ .Values.docker.registry }}/{{ .Values.image.name }}:{{tpl $.Values.image.tag $ }}
+        imagePullPolicy: Always
+        ports:
+{{- range $key, $val := .Values.service }}
+        - name: {{ $key }}
+          containerPort: {{ $val.pod_port }}
+          protocol: {{ $val.protocol }}
+{{- end }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.health.url }}
+            port: app
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          successThreshold: {{ .Values.probes.readiness.successThreshold }}
+          failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.health.url }}
+            port: app
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          successThreshold: {{ .Values.probes.liveness.successThreshold }}
+          failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+{{- if .Values.mount }}
+        volumeMounts:
+{{- range $secret := .Values.mount.secrets }}
+          - name: {{ $secret.name }}
+            mountPath: {{ $secret.path }}
+            readOnly: true
+{{- end }}
+{{- range $configmap := .Values.mount.configmaps }}
+          - name: {{ tpl $configmap.name $ }}
+            mountPath: {{ $configmap.path }}
+            readOnly: true
+{{- end }}
+{{- end }}
+{{- if (.Values.requires_db|default false) }}
+      initContainers:
+        - name: "db-check"
+          image: "{{ .Values.docker.registry }}/{{ .Values.db.image.name }}:{{ .Values.db.image.tag }}"
+          command:
+          - /bin/bash
+          - -c
+          - until pg_isready; do echo waiting for database; sleep 2; done;
+          env:
+          - name: PGUSER
+            value: {{ include "app.db_username" $ }}
+          - name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.name }}-db-access
+                key: db_password
+{{- if .Values.global.useDBOperator}}
+          - name: PGHOST
+            value: {{ include "app.db_host" $ }}
+{{- else }}
+          - name: PGHOST
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.name }}-db-external-secret
+                key: db_host
+{{- end }}
+          - name: PGDATABASE
+            value: {{ include "app.db_name" $ }}
+
+{{- end }}
+      restartPolicy: Always
+      volumes:
+{{- if .Values.mount }}
+{{- range $secret := .Values.mount.secrets }}
+        - name: {{ $secret.name }}
+          secret:
+            secretName: {{ $secret.name }}
+{{- end }}
+{{- range $configmap := .Values.mount.configmaps }}
+        - name: {{ tpl $configmap.name $ }}
+          configMap:
+            name: {{ tpl $configmap.name $ }}
+{{- end }}
+{{- end }}

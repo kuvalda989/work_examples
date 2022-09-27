@@ -1,0 +1,32 @@
+{{- if or (.Values.apigw.config.exposure.resources) (.Values.apigw.config.dependency.resources) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-apigw-config"
+  labels: {{ include "app.labels.static" $ | nindent 4 }}
+data:
+  apigw.json: |-
+    {
+      "dependency": {{ toPrettyJson .Values.apigw.config.dependency | nindent 8 }},
+      {{- if (.Values.apigw.config.exposure.resources) }}
+      "exposure": 
+        {
+          "resources": [
+            {{- $apiBackend := .Values.api_backend }}
+            {{- $dict := .Values.apigw.config.exposure.resources -}}
+            {{- range $index, $key := (keys $dict) | sortAlpha }}
+              {{- if $index -}},{{- end }}
+              {{- $resList := pick $dict $key | values | first }}    
+              {{- if $apiBackend -}}
+                {{- set $resList "api_backend" (toString $apiBackend) | toPrettyJson | nindent 12 -}}
+              {{- else -}}
+                {{- $resList | toPrettyJson | nindent 12 -}}
+              {{- end }}
+            {{- end }}
+          ]
+        }
+      {{- else }}
+      "exposure": {{ toPrettyJson .Values.apigw.config.exposure | nindent 8 }}
+      {{- end }}
+    }
+{{- end }}

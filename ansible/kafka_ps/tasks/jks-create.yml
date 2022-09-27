@@ -1,0 +1,206 @@
+---
+
+- name: jks create
+  block:
+    - name: create dir
+      command: mktemp -d /tmp/kafka-ps-secret.XXXX
+      register: kafka_ps_secret_mktemp_result
+      when: inventory_hostname == ansible_play_hosts[0]
+
+    - name: set kafka_ps_common_tmp_dir
+      set_fact:
+        kafka_ps_secret_tmp_dir: '{{ hostvars[ansible_play_hosts[0]].kafka_ps_secret_mktemp_result.stdout }}'
+
+    - name: create source directories
+      file:
+        path: "{{ kafka_ps_secret_tmp_dir }}/secret_vars"
+        state: directory
+
+    - name: get infra/app_deploy/main secret
+      hashivault_read:
+        mount_point: linux
+        secret: infra/app_deploy/main
+        key: vars
+        version: 2
+      register: app_secret_main_result
+
+    - name: save main secret to file
+      copy:
+        content: '{{ app_secret_main_result.value }}'
+        dest: '{{ kafka_ps_secret_tmp_dir }}/secret_vars/main.yml'
+
+    - name: get infra/service/kafka-ps/ansible secret
+      hashivault_read:
+        mount_point: linux
+        secret: 'infra/service/kafka-ps/ansible'
+        key: vars
+        version: 2
+        default: ''
+      register: app_secret_ansible_result
+
+    - name: save {{ app_deploy_name }} secret to file
+      copy:
+        content: '{{ app_secret_ansible_result.value }}'
+        dest: '{{ kafka_ps_secret_tmp_dir }}/secret_vars/infra-infra-kafka-ps.yml'
+
+    - name: load secret_vars for app
+      include_vars: "{{ item }}"
+      with_items:
+        - "{{ kafka_ps_secret_tmp_dir }}/secret_vars/main.yml"
+        - "{{ kafka_ps_secret_tmp_dir }}/secret_vars/infra-infra-kafka-ps.yml"
+
+    - name: set jks secret list
+      set_fact:
+        kafka_ps_secret_jks_list: "{{ kafka_ps_secret_jks_list }} + [ {{ item.value }} ]"
+      when: item.value.type == 'jks'
+      with_dict: "{{ kafka_ps_secret_dict }}"
+      loop_control:
+        label: "{{ item.key }}"
+
+    - name: create result jks directory
+      file:
+        path: "{{ kafka_ps_secret_tmp_dir }}/jks"
+        state: directory
+
+    - name: create source directories
+      file:
+        path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.file }}"
+        state: directory
+      loop: "{{ kafka_ps_secret_jks_list }}"
+      loop_control:
+        label: "{{ item.file }}"
+
+    - name: put certificates
+      copy:
+        content: "{{ item.1.crt }}"
+        dest: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.crt"
+      when: "'crt' in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.crt"
+
+    - name: put keys
+      copy:
+        content: "{{ item.1.key }}"
+        dest: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.key"
+      when: "'key' in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.key"
+
+    - name: put ca1 certificates
+      copy:
+        content: "{{ item.1.ca1 }}"
+        dest: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.ca1"
+      when: "'ca1' in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.ca1"
+
+    - name: put ca2 certificates
+      copy:
+        content: "{{ item.1.ca2 }}"
+        dest: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.ca2"
+      when: "'ca2' in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.ca2"
+
+    - name: create pkcs12 with ca1
+      openssl_pkcs12:
+        action: export
+        friendly_name: "{{ item.1.name }}"
+        path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.p12"
+        privatekey_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.key"
+        certificate_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.crt"
+        ca_certificates: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.ca1"
+        passphrase: "{{ item.0.password }}"
+        state: present
+      when:
+        - "'key' in item[1]"
+        - "'ca1' in item[1]"
+        - "'ca2' not in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.key"
+
+    - name: create pkcs12 with ca1 + ca2
+      openssl_pkcs12:
+        action: export
+        friendly_name: "{{ item.1.name }}"
+        path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.p12"
+        privatekey_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.key"
+        certificate_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.crt"
+        ca_certificates:
+          - "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.ca1"
+          - "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.ca2"
+        passphrase: "{{ item.0.password }}"
+        state: present
+      when:
+        - "'key' in item[1]"
+        - "'ca1' in item[1]"
+        - "'ca2' in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.key"
+
+    - name: create pkcs12 without ca
+      openssl_pkcs12:
+        action: export
+        friendly_name: "{{ item.1.name }}"
+        path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.p12"
+        privatekey_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.key"
+        certificate_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.crt"
+        passphrase: "{{ item.0.password }}"
+        state: present
+      when:
+        - "'key' in item[1]"
+        - "'ca' not in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.key"
+
+    - name: add certificate
+      java_cert:
+        cert_alias: "{{ item.1.name }}"
+        cert_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.crt"
+        keystore_path: "{{ kafka_ps_secret_tmp_dir }}/jks/{{ item.0.file }}"
+        keystore_pass: "{{ item.0.password }}"
+        keystore_create: yes
+        state: present
+      when:
+        - "'crt' in item[1]"
+        - "'key' not in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.crt"
+
+    - name: add certificate with key
+      java_cert:
+        cert_alias: "{{ item.1.name }}"
+        pkcs12_alias: "{{ item.1.name }}"
+        pkcs12_password: "{{ item.0.password }}"
+        pkcs12_path: "{{ kafka_ps_secret_tmp_dir }}/{{ item.0.file }}/{{ item.1.name }}.p12"
+        keystore_path: "{{ kafka_ps_secret_tmp_dir }}/jks/{{ item.0.file }}"
+        keystore_pass: "{{ item.0.password }}"
+        keystore_create: yes
+        state: present
+      when:
+        - "'crt' in item[1]"
+        - "'key' in item[1]"
+      loop: "{{ kafka_ps_secret_jks_list|subelements('certificates') }}"
+      loop_control:
+        label: "{{ item.0.file }} {{ item.1.name }}.crt"
+  become: no
+  connection: local
+
+- name: copy jks file
+  copy:
+    src: "{{ item }}"
+    dest: "{{ kafka_ps_secret_ssl_path }}"
+    owner: kafka
+    group: kafka
+    mode: 0600
+    # backup: yes
+  with_fileglob:
+    - "{{ hostvars[ansible_play_hosts[0]].kafka_ps_secret_tmp_dir }}/jks/*"

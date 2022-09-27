@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.name }}-env-default
+  labels:
+{{ include "app.labels" $ | indent 4 }}
+data:
+{{- range $key,$val := .Values.env.default }}
+  {{ $key }}: {{ tpl ($val|toString) $ | quote }}
+{{- end }}

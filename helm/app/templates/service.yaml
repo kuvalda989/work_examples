@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}
+  labels:
+{{ include "app.labels" $ | indent 4 }}
+  annotations:
+{{- if (.Values.prometheus | default false) }}
+    prometheus.io/scrape: '{{ .Values.prometheus.scrape | default "true" }}'
+    prometheus.io/probe: '{{ .Values.prometheus.probe | default "true" }}'
+    prometheus.io/port: '{{ .Values.prometheus.service_port }}'
+    prometheus.io/path: '{{ .Values.prometheus.path  | default "/metrics" }}'
+    prometheus.io/health: '{{  .Values.prometheus.health |  default "true" }}'
+    prometheus.io/health_path: '{{  .Values.prometheus.health_path |  default .Values.health.url }}'
+    prometheus.io/health_port: '{{ .Values.prometheus.service_health_port  | default "80" }}'
+{{- end }}
+spec:
+  type: NodePort
+  selector:
+    name: {{ .Values.name }}
+  ports:
+{{- range $key, $val := .Values.service }}
+  - name: {{ $key }}
+    port: {{ $val.service_port }}
+    protocol: {{ $val.protocol }}
+    targetPort: {{ $val.pod_port }}
+{{- end }}

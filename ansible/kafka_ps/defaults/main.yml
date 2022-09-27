@@ -1,0 +1,25 @@
+---
+# defaults file for kafka-ps
+kafka_ps_config_dir: '/etc/kafka'
+kafka_ps_image_tag: '2.12-2.4.0'
+kafka_ps_secret_dict: "{{ hostvars[ansible_play_hosts[0]]['kafka_ps_secrets']|d({}) }}"
+kafka_ps_secret_jks_list: []
+kafka_ps_secret_ssl_path: '/etc/ssl/infra/kafka'
+kafka_ps_retention_hours: 168
+kafka_ps_min_insync_replicas: 2
+
+kafka_ps_broker_id:
+  dc1-kafka-ps1: 0
+  dc1-kafka-ps2: 1
+  dc1-kafka-ps3: 2
+  dc2-kafka-ps1: 3
+  dc2-kafka-ps2: 4
+  dc2-kafka-ps3: 5
+
+kafka_ps_rack_id:
+  dc1-kafka-ps1: 38
+  dc1-kafka-ps2: 38
+  dc1-kafka-ps3: 40
+  dc2-kafka-ps1: G090
+  dc2-kafka-ps2: G090
+  dc2-kafka-ps3: F080
